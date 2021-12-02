@@ -1,0 +1,103 @@
+version: '3'
+
+services:
+
+  reverse_proxy:
+    image: "nginx:latest"
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./conf/nginx/conf.d:/etc/nginx/conf.d
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    networks:
+      - monitoring-net
+      - ldap-net
+    depends_on:
+      - monitoring
+      - prometheus
+      - ldap-admin
+
+  monitoring:
+    image: grafana/grafana
+    expose:
+      - 3000
+    volumes:
+      - ./conf/grafana/grafana.ini:/etc/grafana/grafana.ini
+      - ./conf/grafana/ldap.toml:/etc/grafana/ldap.toml
+    networks:
+      - monitoring-net
+      - ldap-net
+    env_file:
+      - ./conf/grafana/config.monitoring
+
+  prometheus: 
+    image: prom/prometheus
+    expose:
+      - 9090
+    volumes: 
+      - ./conf/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command: 
+      - --config.file=/etc/prometheus/prometheus.yml
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring-net
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    expose:
+      - 9100
+    networks:
+      - monitoring-net
+
+  ldap:
+    image: osixia/openldap
+    restart: unless-stopped
+    expose:
+      - 389
+      - 636
+    environment: # username: cn=admin,dc=example,dc=org
+      - LDAP_ADMIN_PASSWORD=secret
+    volumes:
+      - ldap:/var/lib/ldap
+      - ldap-conf:/etc/ldap/slapd.d
+    networks:
+      - ldap-net
+
+
+  ldap-admin:
+    image: osixia/phpldapadmin
+    restart: unless-stopped
+    expose:
+      - 443
+    environment:
+      - PHPLDAPADMIN_LDAP_HOSTS=ldap
+      - PHPLDAPADMIN_HTTPS=false 
+    networks:
+      - ldap-net
+
+volumes:
+  ldap:
+  ldap-conf:
+  
+networks:
+  ldap-net:
+  monitoring-net:
+    driver: bridge
+
+
+
