@@ -25,6 +25,8 @@ services:
     volumes:
       - ./conf/grafana/grafana.ini:/etc/grafana/grafana.ini
       - ./conf/grafana/ldap.toml:/etc/grafana/ldap.toml
+      - grafana_data:/var/lib/grafana
+      - ./conf/grafana/provisioning/:/etc/grafana/provisioning/
     networks:
       - monitoring-net
       - ldap-net
@@ -37,12 +39,17 @@ services:
       - 9090
     volumes: 
       - ./conf/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
     command: 
       - --config.file=/etc/prometheus/prometheus.yml
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--web.enable-lifecycle'
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --web.console.templates=/etc/prometheus/consoles
+      - --web.enable-lifecycle
+    depends_on:
+      - cadvisor
+    links:
+      - cadvisor:cadvisor
     networks:
       - monitoring-net
 
@@ -63,6 +70,21 @@ services:
       - 9100
     networks:
       - monitoring-net
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    expose:
+      - 8080
+    networks:
+      - monitoring-net
+    restart: always
+    deploy:
+      mode: global
 
   ldap:
     image: osixia/openldap
@@ -93,6 +115,8 @@ services:
 volumes:
   ldap:
   ldap-conf:
+  prometheus_data:
+  grafana_data:
   
 networks:
   ldap-net:
